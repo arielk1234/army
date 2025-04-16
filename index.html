@@ -167,9 +167,25 @@
             color: #721c24;
         }
         
-        .warning {
+        .stats-container {
+            margin-top: 30px;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .stats-header {
+            text-align: center;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .date-stats-table {
+            margin-top: 10px;
+        }
+        
+        .highlight {
             background-color: #fff3cd;
-            color: #856404;
         }
         
         @media (max-width: 600px) {
@@ -228,6 +244,20 @@
             </thead>
             <tbody id="peopleTableBody"></tbody>
         </table>
+        
+        <!-- טבלת סטטיסטיקה חדשה -->
+        <div class="stats-container">
+            <h2 class="stats-header">מספר אנשים בחוץ לפי תאריך</h2>
+            <table id="dateStatsTable" class="date-stats-table">
+                <thead>
+                    <tr>
+                        <th>תאריך</th>
+                        <th>מספר אנשים בחוץ</th>
+                    </tr>
+                </thead>
+                <tbody id="dateStatsTableBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -244,6 +274,7 @@
             if (storedPeople) {
                 peopleList = JSON.parse(storedPeople);
                 renderPeopleTable();
+                updateDateStatsTable();
             }
         }
 
@@ -270,78 +301,6 @@
             }, 5000);
         }
 
-        // פונקציה ליצירת מערך תאריכים בטווח מסוים
-        function getDatesInRange(startDate, endDate) {
-            const dates = [];
-            const currentDate = new Date(startDate);
-            const lastDate = new Date(endDate);
-            
-            // נוסיף יום אחד לתאריך האחרון כדי לכלול גם אותו בחישוב
-            lastDate.setDate(lastDate.getDate() + 1);
-            
-            while (currentDate < lastDate) {
-                dates.push(new Date(currentDate));
-                currentDate.setDate(currentDate.getDate() + 1);
-            }
-            
-            return dates;
-        }
-
-        // פונקציה לבדיקת מספר האנשים שלא נמצאים בתאריכים מסוימים
-        function checkAbsentPeopleCount(newDepartureDate, newReturnDate) {
-            // המרת תאריכי הקלט לאובייקטי Date
-            const newStartDate = new Date(newDepartureDate);
-            const newEndDate = new Date(newReturnDate);
-            
-            // מפה לשמירת מספר האנשים שיוצאים בכל תאריך
-            const absentPeopleByDate = new Map();
-            
-            // יצירת רשימת כל התאריכים בטווח
-            const datesInNewRange = [];
-            let currentDate = new Date(newStartDate);
-            
-            while (currentDate <= newEndDate) {
-                const dateString = currentDate.toISOString().split('T')[0];
-                datesInNewRange.push(dateString);
-                absentPeopleByDate.set(dateString, 0);
-                currentDate.setDate(currentDate.getDate() + 1);
-            }
-            
-            // בדיקת כל האנשים הקיימים ברשימה
-            peopleList.forEach(person => {
-                const personStartDate = new Date(person.departureDate);
-                const personEndDate = new Date(person.returnDate);
-                
-                // בדיקה עבור כל תאריך בטווח החדש
-                for (const dateString of datesInNewRange) {
-                    const checkDate = new Date(dateString);
-                    
-                    // אם התאריך הנוכחי נמצא בטווח של אדם קיים
-                    if (checkDate >= personStartDate && checkDate <= personEndDate) {
-                        absentPeopleByDate.set(dateString, absentPeopleByDate.get(dateString) + 1);
-                    }
-                }
-            });
-            
-            // בדיקה אם יש תאריך שבו כבר יש 3 או יותר אנשים בחוץ
-            let maxAbsentDate = null;
-            let maxAbsentCount = 0;
-            
-            for (const [dateString, count] of absentPeopleByDate.entries()) {
-                if (count >= 3 && count > maxAbsentCount) {
-                    maxAbsentCount = count;
-                    maxAbsentDate = dateString;
-                }
-            }
-            
-            if (maxAbsentDate) {
-                const formattedDate = new Date(maxAbsentDate).toLocaleDateString('he-IL');
-                return { isThreeOrMore: true, date: formattedDate, count: maxAbsentCount };
-            }
-            
-            return { isThreeOrMore: false };
-        }
-
         // פונקציה להוספת אדם חדש
         function addPerson() {
             const name = document.getElementById('name').value.trim();
@@ -358,12 +317,6 @@
             if (new Date(returnDate) < new Date(departureDate)) {
                 showMessage('תאריך החזרה חייב להיות לאחר תאריך היציאה', 'error');
                 return;
-            }
-            
-            // בדיקה אם יש 3 או יותר אנשים שלא נמצאים בתאריכים אלו
-            const absentCheck = checkAbsentPeopleCount(departureDate, returnDate);
-            if (absentCheck.isThreeOrMore) {
-                showMessage(`שים לב שיש כבר ${absentCheck.count} חיילים בחוץ בתאריך ${absentCheck.date}`, 'warning');
             }
             
             // יצירת אובייקט אדם חדש
@@ -384,6 +337,9 @@
             // עדכון הטבלה
             renderPeopleTable();
             
+            // עדכון טבלת הסטטיסטיקה
+            updateDateStatsTable();
+            
             // ניקוי הטופס
             clearForm();
             
@@ -397,6 +353,7 @@
                 peopleList = peopleList.filter(person => person.id !== id);
                 savePeopleToLocalStorage();
                 renderPeopleTable();
+                updateDateStatsTable();
                 showMessage('הרשומה נמחקה בהצלחה', 'success');
             }
         }
@@ -483,6 +440,86 @@
                 tableBody.appendChild(row);
             });
         }
+        
+        // פונקציה לחישוב וריענון טבלת הסטטיסטיקה
+        function updateDateStatsTable() {
+            // אם אין אנשים ברשימה, רק מנקים את הטבלה
+            if (peopleList.length === 0) {
+                document.getElementById('dateStatsTableBody').innerHTML = '<tr><td colspan="2" style="text-align: center;">אין נתונים להצגה</td></tr>';
+                return;
+            }
+            
+            // מציאת טווח התאריכים הכולל מכל האנשים
+            let earliestDate = null;
+            let latestDate = null;
+            
+            peopleList.forEach(person => {
+                const departureDate = new Date(person.departureDate);
+                const returnDate = new Date(person.returnDate);
+                
+                if (!earliestDate || departureDate < earliestDate) {
+                    earliestDate = departureDate;
+                }
+                
+                if (!latestDate || returnDate > latestDate) {
+                    latestDate = returnDate;
+                }
+            });
+            
+            // יצירת מפה של תאריכים וספירת אנשים
+            const dateCountMap = new Map();
+            
+            // הוספת כל התאריכים בטווח למפה
+            const currentDate = new Date(earliestDate);
+            while (currentDate <= latestDate) {
+                const dateString = currentDate.toISOString().split('T')[0];
+                dateCountMap.set(dateString, 0);
+                
+                // התקדמות ליום הבא
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            
+            // ספירת אנשים לכל תאריך
+            peopleList.forEach(person => {
+                const startDate = new Date(person.departureDate);
+                const endDate = new Date(person.returnDate);
+                
+                const currentDate = new Date(startDate);
+                while (currentDate <= endDate) {
+                    const dateString = currentDate.toISOString().split('T')[0];
+                    dateCountMap.set(dateString, dateCountMap.get(dateString) + 1);
+                    
+                    // התקדמות ליום הבא
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+            });
+            
+            // מיון המפה לפי תאריכים
+            const sortedDates = [...dateCountMap.entries()].sort((a, b) => {
+                return new Date(a[0]) - new Date(b[0]);
+            });
+            
+            // עדכון טבלת הסטטיסטיקה
+            const statsTableBody = document.getElementById('dateStatsTableBody');
+            statsTableBody.innerHTML = '';
+            
+            sortedDates.forEach(([dateString, count]) => {
+                const row = document.createElement('tr');
+                const formattedDate = formatDate(dateString);
+                
+                // הוספת הדגשה אם יש 3 או יותר אנשים בחוץ
+                if (count >= 3) {
+                    row.classList.add('highlight');
+                }
+                
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${count}</td>
+                `;
+                
+                statsTableBody.appendChild(row);
+            });
+        }
 
         // אתחול האפליקציה
         document.addEventListener('DOMContentLoaded', () => {
@@ -504,6 +541,9 @@
             document.getElementById('searchInput').addEventListener('input', (e) => {
                 searchPeople(e.target.value);
             });
+            
+            // עדכון ראשוני של טבלת הסטטיסטיקה
+            updateDateStatsTable();
         });
     </script>
 </body>
